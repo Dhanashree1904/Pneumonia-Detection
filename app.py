@@ -1,31 +1,43 @@
 from flask import Flask, render_template, request
-from tensorflow import keras
 import numpy as np
 import cv2
 import os
+import tensorflow as tf  # You can switch to tflite-runtime for even lighter setup
 
 app = Flask(__name__)
 
-# Load your saved Keras model
-MODEL_PATH = os.path.join("saved_model", "detect_model.keras")
-model = keras.models.load_model(MODEL_PATH)
+# Load TensorFlow Lite model
+MODEL_PATH = os.path.join("saved_model", "detect_model.tflite")
+interpreter = tf.lite.Interpreter(model_path=MODEL_PATH)
+interpreter.allocate_tensors()
+
+# Get input and output details
+input_details = interpreter.get_input_details()
+output_details = interpreter.get_output_details()
 
 # Labels
 labels = {0: "Normal", 1: "Pneumonia"}
 
-# Helper function to process image
-def prepare_image(img_path, img_size=150):
-    img = cv2.imread(img_path, cv2.IMREAD_GRAYSCALE)  # assuming your model is grayscale
+# Helper function to preprocess image and predict
+def prepare_and_predict(img_path, img_size=150):
+    img = cv2.imread(img_path, cv2.IMREAD_GRAYSCALE)  # grayscale
     img = cv2.resize(img, (img_size, img_size))
     img = img.astype("float32") / 255.0
     img = np.expand_dims(img, axis=-1)  # add channel dimension
     img = np.expand_dims(img, axis=0)   # add batch dimension
-    return img
+
+    # Run inference
+    interpreter.set_tensor(input_details[0]['index'], img)
+    interpreter.invoke()
+    prediction = interpreter.get_tensor(output_details[0]['index'])[0][0]
+
+    return labels[int(np.round(prediction))]
 
 # Home route
 @app.route("/", methods=["GET", "POST"])
 def index():
     prediction = None
+    img_path = None
     if request.method == "POST":
         if "file" not in request.files:
             return render_template("index.html", prediction="No file uploaded")
@@ -37,18 +49,11 @@ def index():
         img_path = os.path.join("static", file.filename)
         file.save(img_path)
 
-        # Prepare image and predict
-        img = prepare_image(img_path)
-        pred = model.predict(img)
-        class_idx = int(np.round(pred[0][0]))  # for binary classification
-        prediction = labels[class_idx]
+        # Predict
+        prediction = prepare_and_predict(img_path)
 
-        # Optionally remove uploaded image after prediction
-        # os.remove(img_path)
-
-    return render_template("index.html", prediction=prediction)
+    return render_template("index.html", prediction=prediction, img_path=img_path)
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port)
-
