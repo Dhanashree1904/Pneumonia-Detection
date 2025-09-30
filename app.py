@@ -2,13 +2,13 @@ from flask import Flask, render_template, request
 import numpy as np
 import cv2
 import os
-import tensorflow as tf  # You can switch to tflite-runtime for even lighter setup
+import tflite_runtime.interpreter as tflite  # ✅ Use lightweight TFLite runtime
 
 app = Flask(__name__)
 
 # Load TensorFlow Lite model
 MODEL_PATH = os.path.join("saved_model", "detect_model.tflite")
-interpreter = tf.lite.Interpreter(model_path=MODEL_PATH)
+interpreter = tflite.Interpreter(model_path=MODEL_PATH)
 interpreter.allocate_tensors()
 
 # Get input and output details
