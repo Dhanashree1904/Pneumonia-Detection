@@ -5,4 +5,4 @@ opencv-python
 scikit-learn
 matplotlib
 seaborn
-tensorflow-cpu==2.16.1
+tflite-runtime==2.14.0
