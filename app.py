@@ -2,18 +2,13 @@ from flask import Flask, render_template, request
 import numpy as np
 import cv2
 import os
-import tflite_runtime.interpreter as tflite  # ✅ Use lightweight TFLite runtime
+import tensorflow as tf
 
 app = Flask(__name__)
 
-# Load TensorFlow Lite model
-MODEL_PATH = os.path.join("saved_model", "detect_model.tflite")
-interpreter = tflite.Interpreter(model_path=MODEL_PATH)
-interpreter.allocate_tensors()
-
-# Get input and output details
-input_details = interpreter.get_input_details()
-output_details = interpreter.get_output_details()
+# ✅ Load Keras model
+MODEL_PATH = os.path.join("saved_model", "detect_model.keras")
+model = tf.keras.models.load_model(MODEL_PATH)
 
 # Labels
 labels = {0: "Normal", 1: "Pneumonia"}
@@ -23,21 +18,16 @@ def prepare_and_predict(img_path, img_size=150):
     img = cv2.imread(img_path, cv2.IMREAD_GRAYSCALE)  # grayscale
     img = cv2.resize(img, (img_size, img_size))
     img = img.astype("float32") / 255.0
-    img = np.expand_dims(img, axis=-1)  # add channel dimension
-    img = np.expand_dims(img, axis=0)   # add batch dimension
+    img = np.expand_dims(img, axis=-1)  # channel dim
+    img = np.expand_dims(img, axis=0)   # batch dim
 
-    # Run inference
-    interpreter.set_tensor(input_details[0]['index'], img)
-    interpreter.invoke()
-    prediction = interpreter.get_tensor(output_details[0]['index'])[0][0]
-
+    prediction = model.predict(img, verbose=0)[0][0]
     return labels[int(np.round(prediction))]
 
-# Home route
+# Routes
 @app.route("/", methods=["GET", "POST"])
 def index():
-    prediction = None
-    img_path = None
+    prediction, img_path = None, None
     if request.method == "POST":
         if "file" not in request.files:
             return render_template("index.html", prediction="No file uploaded")
@@ -45,7 +35,7 @@ def index():
         if file.filename == "":
             return render_template("index.html", prediction="No file selected")
         
-        # Save uploaded image temporarily
+        # Save uploaded file
         img_path = os.path.join("static", file.filename)
         file.save(img_path)
 
